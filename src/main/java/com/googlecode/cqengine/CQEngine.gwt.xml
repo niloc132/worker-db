@@ -1,0 +1,47 @@
+<module>
+  <inherits name="com.googlecode.concurrenttrees.ConcurrentTrees" />
+
+  <source path="attribute">
+    <exclude name="ReflectiveAttribute.java" />
+  </source>
+  <source path="engine" />
+  <source path="entity" />
+  <source path="index">
+    <exclude name="offheap/**"/>
+    <exclude name="sqlite/**"/>
+    <exclude name="disk/**"/>
+    <exclude name="navigable/PartialNavigableIndex.java"/>
+  </source>
+  <source path="persistence">
+    <exclude name="offheap/**"/>
+    <exclude name="disk/**" />
+    <exclude name="support/sqlite/**" />
+    <exclude name="composite/CompositePersistence.java" />
+  </source>
+  <source path="quantizer" />
+
+  <source path="query/parser">
+    <exclude name="sql/**" />
+    <exclude name="cqn/**" />
+    <exclude name="common/ParserUtils.java" />
+    <exclude name="common/QueryParser.java" />
+  </source>
+  <source path="query/logical" />
+  <source path="query/option" />
+  <source path="query">
+    <include name="Query.java" />
+    <include name="QueryFactory.java" />
+  </source>
+  <source path="query/simple" />
+
+  <source path="resultset" />
+
+  <source path="">
+    <include name="ConcurrentIndexedCollection.java" />
+    <include name="IndexedCollection.java" />
+    <exclude name="ObjectLockingIndexedCollection.java" />
+    <exclude name="TransactionalIndexedCollection.java" />
+  </source>
+
+  <super-source path="super" />
+</module>

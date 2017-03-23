@@ -1,0 +1,9 @@
+<module>
+  <inherits name="java.lang.Lang"/>
+  <inherits name="com.google.common.base.Base" />
+  <inherits name="com.googlecode.cqengine.CQEngine" />
+
+  <source path="worker" />
+
+  <entry-point class="superstore.worker.Store" />
+</module>
