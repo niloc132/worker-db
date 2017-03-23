@@ -2,6 +2,7 @@
   <inherits name="java.lang.Lang"/>
   <inherits name="com.google.common.base.Base" />
   <inherits name="com.googlecode.cqengine.CQEngine" />
+  <inherits name="com.google.common.collect.Collect"/>
 
   <source path="worker" />
 
