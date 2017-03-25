@@ -47,20 +47,31 @@ public class Store implements EntryPoint {
         collection.add(QueryFactory.mapEntity(item));
     }
 
-    public void query(Query<Map<String, ?>> query, Callback<ArrayList<Map<String, ?>>, Throwable> callback) {
+    public void query(Query<Map<String, ?>> query, QueryOptions options, Callback<ArrayList<Map<String, ?>>, Throwable> callback) {
         try {
             //TODO consider changing API to stream results instead
-            callback.onSuccess(Lists.newArrayList(collection.retrieve(query)));
+            callback.onSuccess(Lists.newArrayList(collection.retrieve(query, options)));
         } catch (Throwable t) {
             callback.onFailure(t);
         }
-
     }
 
     @Override
     public void onModuleLoad() {
         addItem(new HashMap<>());
+        query(QueryFactory.equal(makeAttribute("name", String.class), null), QueryFactory.noQueryOptions(), new Callback<ArrayList<Map<String, ?>>, Throwable>() {
+            @Override
+            public void onFailure(Throwable reason) {
+                alert(reason.getMessage());
+            }
+
+            @Override
+            public void onSuccess(ArrayList<Map<String, ?>> result) {
+                alert("count: " + result.size());
+            }
+        });
     }
 
+    private native void alert(String message) /*-{ $wnd.alert(message); }-*/;
 
 }
