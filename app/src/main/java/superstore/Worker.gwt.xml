@@ -1,0 +1,8 @@
+<module>
+  <inherits name="com.googlecode.cqengine.CQEngine" />
+  <inherits name="com.google.common.collect.Collect"/>
+
+  <source path="worker" />
+
+  <entry-point class="superstore.worker.Store" />
+</module>
