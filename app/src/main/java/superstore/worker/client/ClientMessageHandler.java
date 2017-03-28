@@ -7,6 +7,7 @@ import jsinterop.annotations.JsPackage;
 import jsinterop.annotations.JsType;
 import superstore.common.shared.StoreClient;
 import superstore.common.shared.StoreServer;
+import superstore.common.shared.attribute.AbstractMapAttribute;
 
 import java.util.List;
 import java.util.Map;
@@ -27,9 +28,8 @@ public class ClientMessageHandler extends AbstractClientImpl<StoreServer> implem
     }
 
     @Override
-    public void schemaLoaded(String name, Map<String, Attribute<Map<String, String>, ?>> columns) {
+    public void schemaLoaded(String name, Map<String, AbstractMapAttribute<?>> columns) {
         Console.log("Schema loaded, " + columns.size() + " columns");
-
     }
 
     @Override
@@ -40,8 +40,18 @@ public class ClientMessageHandler extends AbstractClientImpl<StoreServer> implem
     @Override
     public void queryResults(Query<?> query, List<Map<String, String>> results, int offset) {
         Console.log("Results loading " + offset);
-
     }
+
+    @Override
+    public void uniqueKeysLoaded(Attribute<Map<String, String>, ?> attribute, int totalCount) {
+        Console.log("unique keys for attribute " + attribute.getAttributeName() + " count: " + totalCount);
+    }
+
+    @Override
+    public <T> void uniqueKeysResults(Attribute<Map<String, String>, T> attribute, List<T> results, int offset) {
+        Console.log(attribute.getAttributeName() + " : " + results);
+    }
+
     @JsType(isNative = true, name = "console", namespace = JsPackage.GLOBAL)
     public static class Console {
         public native static void log(String message);

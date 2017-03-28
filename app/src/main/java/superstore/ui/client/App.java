@@ -14,6 +14,7 @@ import com.googlecode.cqengine.query.Query;
 import com.googlecode.cqengine.query.parser.common.ParseResult;
 import superstore.common.shared.StoreClient;
 import superstore.common.shared.StoreServer;
+import superstore.common.shared.attribute.AbstractMapAttribute;
 import superstore.worker.client.ClientMessageHandler;
 import superstore.worker.client.ClientMessageHandler.Console;
 
@@ -34,7 +35,17 @@ public class App implements EntryPoint {
 
         StoreServer server = factory.start();
 
-        server.setClient(new ClientMessageHandler());
+        server.setClient(new ClientMessageHandler() {
+            @Override
+            public void schemaLoaded(String name, Map<String, AbstractMapAttribute<?>> columns) {
+                super.schemaLoaded(name, columns);
+                for (AbstractMapAttribute<?> attribute : columns.values()) {
+                    RootPanel.get().add(new Button(attribute.getAttributeName() + " values", (ClickHandler) e -> {
+                        server.loadUniqueKeysForColumn(name, attribute);
+                    }));
+                }
+            }
+        });
 
         TextArea textArea = new TextArea();
         textArea.setValue("between(\"Date\", \"2010-01-01\", \"2010-01-02\")");

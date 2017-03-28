@@ -8,6 +8,12 @@ import com.google.gwt.core.client.Callback;
 import com.googlecode.cqengine.ConcurrentIndexedCollection;
 import com.googlecode.cqengine.IndexedCollection;
 import com.googlecode.cqengine.attribute.Attribute;
+import com.googlecode.cqengine.index.AttributeIndex;
+import com.googlecode.cqengine.index.Index;
+import com.googlecode.cqengine.index.hash.HashIndex;
+import com.googlecode.cqengine.index.navigable.NavigableIndex;
+import com.googlecode.cqengine.index.support.CloseableIterator;
+import com.googlecode.cqengine.index.support.KeyStatisticsAttributeIndex;
 import com.googlecode.cqengine.query.Query;
 import com.googlecode.cqengine.query.QueryFactory;
 import com.googlecode.cqengine.query.option.QueryOptions;
@@ -19,6 +25,7 @@ import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 import superstore.common.shared.StoreClient;
 import superstore.common.shared.StoreServer;
+import superstore.common.shared.attribute.AbstractMapAttribute;
 import superstore.common.shared.attribute.MapIntegerAttribute;
 import superstore.common.shared.attribute.MapStringAttribute;
 
@@ -43,9 +50,15 @@ public class Server extends AbstractServerImpl<StoreServer, StoreClient> impleme
     public void onOpen(Connection connection, StoreClient client) {
         super.onOpen(connection, client);
 
+        trafficData.addIndex(NavigableIndex.onAttribute(new MapStringAttribute("Date")));
+        //TODO partial index on each station for its date and hour?
+        trafficData.addIndex(HashIndex.onAttribute(new MapStringAttribute("STA")));
+//        trafficData.addIndex(HashIndex.onAttribute(new MapStringAttribute("Direction")));
+
         //load data from disk
         File csv = new File("/Users/colin/Downloads/mn_dot_traffic_5m.csv");
         long totalLength = csv.length();
+
         try (CountingFileReader reader = (new CountingFileReader(csv))) {
             try (CSVParser parser = new CSVParser(new BufferedReader(reader), CSVFormat.RFC4180.withHeader())) {
                 Iterator<CSVRecord> iterator = parser.iterator();
@@ -70,14 +83,6 @@ public class Server extends AbstractServerImpl<StoreServer, StoreClient> impleme
             e.printStackTrace();
         }
 
-
-        //build indexes
-        client.buildingIndexes("traffic");
-//        trafficData.addIndex(NavigableIndex.onAttribute(new MapStringAttribute("Date")));
-        //TODO partial index on each station for its date and hour?
-//        trafficData.addIndex(HashIndex.onAttribute(new MapStringAttribute("STA")));
-
-//        trafficData.addIndex(HashIndex.onAttribute(new MapStringAttribute("Direction")));
 
         //inform client of schemas
         client.schemaLoaded("traffic", getSchema("traffic"));
@@ -119,9 +124,33 @@ public class Server extends AbstractServerImpl<StoreServer, StoreClient> impleme
         }
     }
 
-    private Map<String, Attribute<Map<String, String>, ?>> getSchema(String schema) {
+    @Override
+    public void loadUniqueKeysForColumn(String schema, AbstractMapAttribute<?> attribute) {
         assert schema.equals("traffic");
-        Map<String, Attribute<Map<String, String>, ?>> traffic = new HashMap<>();
+
+        Optional<KeyStatisticsAttributeIndex<Object, Map<String, String>>> hasIndex = Streams.stream(trafficData.getIndexes())
+                .filter(index -> index instanceof KeyStatisticsAttributeIndex)
+                .map(index -> (KeyStatisticsAttributeIndex<Object, Map<String, String>>) index)
+                .filter(index -> index.getAttribute().equals(attribute))
+                .findFirst();
+        if (hasIndex.isPresent()) {
+            int count = hasIndex.get().getCountOfDistinctKeys(QueryFactory.noQueryOptions());
+            getClient().uniqueKeysLoaded(attribute, count);
+
+            CloseableIterator<Object> iterator = hasIndex.get().getDistinctKeys(QueryFactory.noQueryOptions()).iterator();
+            int offset = 0;
+            while (iterator.hasNext()) {
+                getClient().uniqueKeysResults((Attribute) attribute, Lists.newArrayList(Iterators.limit(iterator, 200)), offset);
+                offset += 200;
+            }
+        } else {
+            getClient().uniqueKeysLoaded(attribute, 0);
+        }
+    }
+
+    private Map<String, AbstractMapAttribute<?>> getSchema(String schema) {
+        assert schema.equals("traffic");
+        Map<String, AbstractMapAttribute<?>> traffic = new HashMap<>();
         traffic.put("Date", new MapStringAttribute("Date"));
         traffic.put("STA", new MapStringAttribute("STA"));
         traffic.put("Hour", new MapIntegerAttribute("Hour"));
