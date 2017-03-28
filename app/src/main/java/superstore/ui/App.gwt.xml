@@ -1,0 +1,5 @@
+<module>
+  <inherits name="superstore.worker.Worker" />
+
+  <entry-point class="superstore.ui.client.App"/>
+</module>

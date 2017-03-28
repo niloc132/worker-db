@@ -1,0 +1,11 @@
+<module>
+  <inherits name="superstore.common.Common"/>
+  <inherits name="com.googlecode.cqengine.CQEngine" />
+  <inherits name="com.google.common.collect.Collect"/>
+  <inherits name="com.colinalworth.gwt.websockets.RpcOverWebSockets"/>
+
+
+  <source path="client" />
+
+  <!--<entry-point class="superstore.worker.Store" />-->
+</module>

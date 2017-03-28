@@ -28,9 +28,26 @@
       <groupId>com.google.gwt</groupId>
       <artifactId>gwt-user</artifactId>
       <version>${gwt.version}</version>
-      <scope>provided</scope>
+      <!--<scope>provided</scope>-->
+    </dependency>
+    <dependency>
+      <groupId>com.google.gwt</groupId>
+      <artifactId>gwt-dev</artifactId>
+      <version>${gwt.version}</version>
+      <!--<scope>provided</scope>-->
     </dependency>
 
+    <dependency>
+      <groupId>com.colinalworth.gwt.websockets</groupId>
+      <artifactId>javaee-websocket-gwt-rpc</artifactId>
+      <version>0.0.1-SNAPSHOT</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-csv</artifactId>
+      <version>1.0</version>
+    </dependency>
   </dependencies>
 
   <build>
@@ -52,5 +69,15 @@
         </configuration>
       </plugin>
     </plugins>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>org.eclipse.jetty</groupId>
+          <artifactId>jetty-maven-plugin</artifactId>
+          <version>9.2.3.v20140905</version>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+
   </build>
 </project>
