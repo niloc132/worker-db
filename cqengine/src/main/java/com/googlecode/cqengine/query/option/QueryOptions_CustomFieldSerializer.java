@@ -6,6 +6,7 @@ import com.google.gwt.user.client.rpc.SerializationStreamReader;
 import com.google.gwt.user.client.rpc.SerializationStreamWriter;
 
 import java.util.Map;
+import java.util.Map.Entry;
 
 public class QueryOptions_CustomFieldSerializer extends CustomFieldSerializer<QueryOptions> {
     @Override
@@ -23,7 +24,26 @@ public class QueryOptions_CustomFieldSerializer extends CustomFieldSerializer<Qu
     }
 
     public static void serialize(SerializationStreamWriter streamWriter, QueryOptions instance) throws SerializationException {
-        streamWriter.writeObject(instance.getOptions());
+        streamWriter.writeInt(instance.getOptions().size());
+        for (Entry<Object, Object> entry : instance.getOptions().entrySet()) {
+            if (entry.getValue() == null) {
+                continue;
+            }
+            //manually check each to see if its class is its key
+            if (entry.getKey() instanceof Class) {
+                Class clazz = (Class) entry.getKey();
+                if (entry.getValue().getClass().equals(clazz)) {
+                    streamWriter.writeBoolean(true);
+                    streamWriter.writeObject(entry.getValue());
+                } else {
+                    //sip, TODO log or fail?
+                }
+            } else {
+                streamWriter.writeBoolean(false);
+                streamWriter.writeObject(entry.getKey());
+                streamWriter.writeObject(entry.getValue());
+            }
+        }
     }
 
     @Override
@@ -32,9 +52,21 @@ public class QueryOptions_CustomFieldSerializer extends CustomFieldSerializer<Qu
     }
 
     public static QueryOptions instantiate(SerializationStreamReader streamReader) throws SerializationException {
-        return new QueryOptions(
-                (Map) streamReader.readObject()
-        );
+        QueryOptions options = new QueryOptions();
+        int count = streamReader.readInt();
+        for (int i = 0; i < count; i++) {
+            boolean isClassKey = streamReader.readBoolean();
+            if (isClassKey) {
+                Object obj = streamReader.readObject();
+                options.put(obj.getClass(), obj);
+            } else {
+                Object key = streamReader.readObject();
+                Object value = streamReader.readObject();
+                options.put(key, value);
+            }
+        }
+
+        return options;
     }
 
     @Override
