@@ -153,12 +153,12 @@ public class ConcurrentSkipListMap <K,V> extends TreeMap<K,V> implements Cloneab
 
     @Override
     public ConcurrentNavigableMap<K, V> subMap(K fromKey, K toKey) {
-        return (ConcurrentNavigableMap<K, V>) super.subMap(fromKey, toKey);
+        return new ConcurrentSkipListMap<>(super.subMap(fromKey, toKey));
     }
 
     @Override
     public ConcurrentNavigableMap<K, V> subMap(K fromKey, boolean fromInclusive, K toKey, boolean toInclusive) {
-        return (ConcurrentNavigableMap<K, V>) super.subMap(fromKey, fromInclusive, toKey, toInclusive);
+        return new ConcurrentSkipListMap<>(super.subMap(fromKey, fromInclusive, toKey, toInclusive));
     }
 
     @Override
