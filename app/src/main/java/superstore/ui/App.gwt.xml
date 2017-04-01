@@ -1,5 +1,7 @@
 <module>
-  <inherits name="superstore.worker.Worker" />
+  <inherits name="superstore.common.Common" />
+
+  <inherits name="com.google.gwt.user.User" />
 
   <entry-point class="superstore.ui.client.App"/>
 </module>

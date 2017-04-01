@@ -3,9 +3,16 @@
   <inherits name="com.googlecode.cqengine.CQEngine" />
   <inherits name="com.google.common.collect.Collect"/>
   <inherits name="com.colinalworth.gwt.websockets.RpcOverWebSockets"/>
+  <inherits name="prj.gwtwwlinker.workerlinker.WorkerLinker" />
+
 
 
   <source path="client" />
 
-  <!--<entry-point class="superstore.worker.Store" />-->
+  <set-configuration-property name="user.agent.runtimeWarning" value="false"/>
+  <set-configuration-property name="document.compatMode.severity" value="IGNORE" />
+
+  <set-property name="user.agent" value="safari" />
+
+  <entry-point class="superstore.worker.client.BackgroundStore" />
 </module>

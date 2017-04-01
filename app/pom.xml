@@ -42,6 +42,11 @@
       <artifactId>javaee-websocket-gwt-rpc</artifactId>
       <version>0.0.1-SNAPSHOT</version>
     </dependency>
+    <dependency>
+      <groupId>com.colinalworth.gwt.websockets</groupId>
+      <artifactId>workers</artifactId>
+      <version>0.0.1-SNAPSHOT</version>
+    </dependency>
 
     <dependency>
       <groupId>org.apache.commons</groupId>

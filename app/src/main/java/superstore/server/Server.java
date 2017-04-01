@@ -8,8 +8,6 @@ import com.google.gwt.core.client.Callback;
 import com.googlecode.cqengine.ConcurrentIndexedCollection;
 import com.googlecode.cqengine.IndexedCollection;
 import com.googlecode.cqengine.attribute.Attribute;
-import com.googlecode.cqengine.index.AttributeIndex;
-import com.googlecode.cqengine.index.Index;
 import com.googlecode.cqengine.index.hash.HashIndex;
 import com.googlecode.cqengine.index.navigable.NavigableIndex;
 import com.googlecode.cqengine.index.support.CloseableIterator;
@@ -53,10 +51,10 @@ public class Server extends AbstractServerImpl<StoreServer, StoreClient> impleme
         trafficData.addIndex(NavigableIndex.onAttribute(new MapStringAttribute("Date")));
         //TODO partial index on each station for its date and hour?
         trafficData.addIndex(HashIndex.onAttribute(new MapStringAttribute("STA")));
-//        trafficData.addIndex(HashIndex.onAttribute(new MapStringAttribute("Direction")));
+        trafficData.addIndex(HashIndex.onAttribute(new MapStringAttribute("Direction")));
 
         //load data from disk
-        File csv = new File("/Users/colin/Downloads/mn_dot_traffic_5m.csv");
+        File csv = new File("/Users/colin/Downloads/mn_dot_traffic_6m.csv");
         long totalLength = csv.length();
 
         try (CountingFileReader reader = (new CountingFileReader(csv))) {
@@ -72,10 +70,6 @@ public class Server extends AbstractServerImpl<StoreServer, StoreClient> impleme
 
                     double percent = (double) reader.getPosition() / totalLength;
                     client.dataLoadedFromDisk("traffic", percent, trafficData.size());
-//                    if (trafficData.size() % 1_000_000 == 0) {
-                    System.out.println(new Date());
-                        System.out.println("" + (percent * 100) + "% loaded, " + trafficData.size() + " items");
-//                    }
                 }
 
             }

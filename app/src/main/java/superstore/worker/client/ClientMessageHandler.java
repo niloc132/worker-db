@@ -18,33 +18,27 @@ import java.util.Map;
 public class ClientMessageHandler extends AbstractClientImpl<StoreServer> implements StoreClient {
     @Override
     public void dataLoadedFromDisk(String schema, double percent, int rows) {
-        Console.log("Data loading for " + schema + " from disk, " + (percent * 100) + ", " + rows + " loaded");
-    }
-
-    @Override
-    public void buildingIndexes(String schema) {
-        Console.log("Building indexes...");
-
+        Console.log("Data into server loading for " + schema + " from disk, " + (percent * 100) + ", " + rows + " loaded");
     }
 
     @Override
     public void schemaLoaded(String name, Map<String, AbstractMapAttribute<?>> columns) {
-        Console.log("Schema loaded, " + columns.size() + " columns");
+        Console.log("Server schema loaded, " + columns.size() + " columns");
     }
 
     @Override
     public void queryFinished(Query<?> query, int totalCount) {
-        Console.log("Query had " + totalCount + " results");
+        Console.log("Server query had " + totalCount + " results");
     }
 
     @Override
     public void queryResults(Query<?> query, List<Map<String, String>> results, int offset) {
-        Console.log("Results loading " + offset);
+        Console.log("Server results loading into worker " + offset);
     }
 
     @Override
     public void uniqueKeysLoaded(Attribute<Map<String, String>, ?> attribute, int totalCount) {
-        Console.log("unique keys for attribute " + attribute.getAttributeName() + " count: " + totalCount);
+        Console.log("Unique keys from server for attribute " + attribute.getAttributeName() + " count: " + totalCount);
     }
 
     @Override
