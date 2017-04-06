@@ -5,10 +5,7 @@ import com.google.gwt.core.client.Callback;
 import com.google.gwt.core.client.EntryPoint;
 import com.google.gwt.core.client.GWT;
 import com.google.gwt.event.dom.client.ClickHandler;
-import com.google.gwt.user.client.ui.Button;
-import com.google.gwt.user.client.ui.FlowPanel;
-import com.google.gwt.user.client.ui.RootPanel;
-import com.google.gwt.user.client.ui.TextArea;
+import com.google.gwt.user.client.ui.*;
 import com.googlecode.cqengine.attribute.Attribute;
 import com.googlecode.cqengine.query.Query;
 import com.googlecode.cqengine.query.parser.common.ParseResult;
@@ -33,6 +30,12 @@ public class App implements EntryPoint {
     interface Factory extends WorkerFactory<StoreWorker, StoreApp> {}
     @Override
     public void onModuleLoad() {
+        RootPanel.get().add(new Label("" +
+                "This demo app is best run in Chrome, with the developer tools open, to see network data stream in" +
+                "(Network tab, click on 'socket'), and with the Console open to see results logged from the worker" +
+                "and from the app as various events take place and to show unique index values as they are " +
+                "available."
+        ));
 //        Factory factory = GWT.create(Factory.class);
 //        factory.setPath("/socket");
 //
