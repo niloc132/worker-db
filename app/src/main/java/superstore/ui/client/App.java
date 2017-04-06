@@ -78,6 +78,11 @@ public class App implements EntryPoint {
             }
 
             @Override
+            public void additionalQueryResults(Query<?> query, List<Map<String, String>> items) {
+                Console.log("More items streamed in to app: " + items.size());
+            }
+
+            @Override
             public void uniqueKeysLoaded(Attribute<Map<String, String>, ?> attribute, int totalCount) {
                 Console.log("unique keys for attribute " + attribute.getAttributeName() + " count: " + totalCount);
             }

@@ -19,6 +19,7 @@ public interface StoreApp extends Endpoint<StoreWorker> {
 
     void queryFinished(Query<?> query, int totalCount);
     void queryResults(Query<?> query, List<Map<String, String>> results, int offset);
+    void additionalQueryResults(Query<?> query, List<Map<String, String>> items);
 
     void uniqueKeysLoaded(Attribute<Map<String, String>, ?> attribute, int totalCount);
     <T> void uniqueKeysResults(Attribute<Map<String, String>, T> attribute, List<T> results, int offset);

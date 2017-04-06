@@ -31,6 +31,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * Created by colin on 3/28/17.
@@ -43,7 +44,7 @@ public class BackgroundStore implements EntryPoint {
     private IndexedCollection<Map<String, String>> trafficData = new ConcurrentIndexedCollection<>();
     private Map<String, AbstractMapAttribute<?>> columns;
     private volatile Query<?> activeQuery;
-
+    private QueryOptions activeQueryOptions;
 
     private StoreApp app;
 
@@ -72,6 +73,7 @@ public class BackgroundStore implements EntryPoint {
             @Override
             public void runLocalQuery(Query<?> query, QueryOptions options) {
                 activeQuery = query;
+                activeQueryOptions = options;
                 //race here, new data could start to show up before the existing data, and could be included twice
                 ResultSet<Map<String, String>> results = trafficData.retrieve((Query<Map<String, String>>) query, options);
                 if (!query.equals(activeQuery)) {
@@ -155,9 +157,23 @@ public class BackgroundStore implements EntryPoint {
 
                 trafficData.addAll(results);
                 if (incomingResults == trafficData.size()) {
-//                    //all data is in the client, tell the app about current unique values or something
+                    //all data is in the client, tell the app about current unique values or something
                     for (AbstractMapAttribute<?> attribute : columns.values()) {
                         workerImpl.loadLocalUniqueKeysForColumn("traffic", attribute);
+                    }
+                }
+            }
+
+            @Override
+            public void additionalQueryResults(Query<?> query, List<Map<String, String>> items) {
+                super.additionalQueryResults(query, items);
+
+                trafficData.addAll(items);
+
+                if (activeQuery != null) {
+                    List<Map<String, String>> filteredItems = items.stream().filter(obj -> ((Query) activeQuery).matches(obj, activeQueryOptions)).collect(Collectors.toList());
+                    if (!filteredItems.isEmpty()) {
+                        app.additionalQueryResults(activeQuery, filteredItems);
                     }
                 }
             }

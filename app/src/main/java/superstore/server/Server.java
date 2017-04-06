@@ -3,6 +3,7 @@ package superstore.server;
 import com.colinalworth.gwt.websockets.server.AbstractServerImpl;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
+import com.google.common.collect.PeekingIterator;
 import com.google.common.collect.Streams;
 import com.google.gwt.core.client.Callback;
 import com.googlecode.cqengine.ConcurrentIndexedCollection;
@@ -30,15 +31,21 @@ import superstore.common.shared.attribute.MapStringAttribute;
 import javax.websocket.server.ServerEndpoint;
 import java.io.*;
 import java.util.*;
+import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
 @ServerEndpoint("/socket")
 public class Server extends AbstractServerImpl<StoreServer, StoreClient> implements StoreServer {
+    private static final ScheduledExecutorService execService = Executors.newScheduledThreadPool(2);
+
     private IndexedCollection<Map<String, String>> trafficData = new ConcurrentIndexedCollection<>();
     private static final int batchSize = 50_000;
 
     /** currently executing and updated query for this instance's active connection */
-    private volatile Query<?> activeQuery;
+    private Query<?> activeQuery;
+    private QueryOptions activeQueryOptions;
+    /** Items left to read from the file */
+    private PeekingIterator<CSVRecord> recordIterator;
 
     public Server() {
         super(StoreClient.class);
@@ -57,21 +64,23 @@ public class Server extends AbstractServerImpl<StoreServer, StoreClient> impleme
         File csv = new File("/Users/colin/Downloads/mn_dot_traffic_6m.csv");
         long totalLength = csv.length();
 
-        try (CountingFileReader reader = (new CountingFileReader(csv))) {
-            try (CSVParser parser = new CSVParser(new BufferedReader(reader), CSVFormat.RFC4180.withHeader())) {
-                Iterator<CSVRecord> iterator = parser.iterator();
-                while (iterator.hasNext()) {
-                    List<Map<String, String>> page = Streams.stream(Iterators.limit(iterator, batchSize))
-                            .map(CSVRecord::toMap)
-                            .map((map) -> (Map<String, String>) QueryFactory.mapEntity(map))
-                            .collect(Collectors.toList());
-                    trafficData.addAll(page);
+        try {
+            CountingFileReader reader = new CountingFileReader(csv);
+            CSVParser parser = new CSVParser(new BufferedReader(reader), CSVFormat.RFC4180.withHeader());
+            recordIterator = Iterators.peekingIterator(parser.iterator());
+            while (recordIterator.hasNext()) {
+                List<Map<String, String>> page = Streams.stream(Iterators.limit(recordIterator, batchSize))
+                        .map(this::wrap)
+                        .collect(Collectors.toList());
+                trafficData.addAll(page);
 
 
-                    double percent = (double) reader.getPosition() / totalLength;
-                    client.dataLoadedFromDisk("traffic", percent, trafficData.size());
+                double percent = (double) reader.getPosition() / totalLength;
+                client.dataLoadedFromDisk("traffic", percent, trafficData.size());
+                if (trafficData.size() >= 5_000_000) {
+                    // stop so we can stream the rest of the results
+                    break;
                 }
-
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -84,11 +93,53 @@ public class Server extends AbstractServerImpl<StoreServer, StoreClient> impleme
         // start a thread telling the client that data is ready, streaming an hour per second, if it matches
         // the active query
 
+        execService.scheduleAtFixedRate(() -> {
+            //scheduleAtFixedRate specifies:
+            //  If any execution of this task
+            //  takes longer than its period, then subsequent executions
+            //  may start late, but will not concurrently execute.
+
+            if (!recordIterator.hasNext()) {
+                return;
+            }
+            //read an item, read as many more as can be read that match the same day and hour
+            List<Map<String, String>> items = new ArrayList<>();
+            Map<String, String> first = wrap(recordIterator.next());
+            items.add(first);
+            String date = first.get("Date");
+            String hour = first.get("Hour");
+            while (recordIterator.hasNext()) {
+                Map<String, String> next = wrap(recordIterator.peek());
+                if (!date.equals(next.get("Date")) || !hour.equals(next.get("Hour"))) {
+                    break;
+                }
+                items.add(next);
+                recordIterator.next();
+            }
+
+            // I think this technically could race with itself, and send out-of-ordered results to the browser
+            execService.submit(() -> addItems(items));
+        }, 1, 1, TimeUnit.SECONDS);
+    }
+
+    private Map<String, String> wrap(CSVRecord record) {
+        return QueryFactory.mapEntity(record.toMap());
+    }
+
+    protected synchronized void addItems(List<Map<String, String>> items) {
+        trafficData.addAll(items);
+        if (activeQuery != null) {
+            List<Map<String, String>> filteredItems = items.stream().filter(obj -> ((Query) activeQuery).matches(obj, activeQueryOptions)).collect(Collectors.toList());
+            if (!filteredItems.isEmpty()) {
+                getClient().additionalQueryResults(activeQuery, filteredItems);
+            }
+        }
     }
 
     @Override
-    public void runQuery(Query<?> query, QueryOptions options) {
+    public synchronized void runQuery(Query<?> query, QueryOptions options) {
         activeQuery = query;
+        activeQueryOptions = options;
         //race here, new data could start to show up before the existing data, and could be included twice
         ResultSet<Map<String, String>> results = trafficData.retrieve((Query<Map<String, String>>) query, options);
         if (!query.equals(activeQuery)) {
@@ -119,7 +170,7 @@ public class Server extends AbstractServerImpl<StoreServer, StoreClient> impleme
     }
 
     @Override
-    public void loadUniqueKeysForColumn(String schema, AbstractMapAttribute<?> attribute) {
+    public synchronized void loadUniqueKeysForColumn(String schema, AbstractMapAttribute<?> attribute) {
         assert schema.equals("traffic");
 
         Optional<KeyStatisticsAttributeIndex<Object, Map<String, String>>> hasIndex = Streams.stream(trafficData.getIndexes())

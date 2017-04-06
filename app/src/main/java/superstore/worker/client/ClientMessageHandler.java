@@ -37,6 +37,11 @@ public class ClientMessageHandler extends AbstractClientImpl<StoreServer> implem
     }
 
     @Override
+    public void additionalQueryResults(Query<?> query, List<Map<String, String>> items) {
+        Console.log("More results that match: " + items.size());
+    }
+
+    @Override
     public void uniqueKeysLoaded(Attribute<Map<String, String>, ?> attribute, int totalCount) {
         Console.log("Unique keys from server for attribute " + attribute.getAttributeName() + " count: " + totalCount);
     }
