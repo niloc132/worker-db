@@ -37,6 +37,7 @@ import java.util.stream.Collectors;
 @ServerEndpoint("/socket")
 public class Server extends AbstractServerImpl<StoreServer, StoreClient> implements StoreServer {
     private static final ScheduledExecutorService execService = Executors.newScheduledThreadPool(2);
+    public static final String TRAFFIC_CSV = System.getProperty("traffic_csv", "/Users/colin/Downloads/mn_dot_traffic_6m.csv");
 
     private IndexedCollection<Map<String, String>> trafficData = new ConcurrentIndexedCollection<>();
     private static final int batchSize = 50_000;
@@ -61,7 +62,7 @@ public class Server extends AbstractServerImpl<StoreServer, StoreClient> impleme
         trafficData.addIndex(HashIndex.onAttribute(new MapStringAttribute("Direction")));
 
         //load data from disk
-        File csv = new File("/Users/colin/Downloads/mn_dot_traffic_6m.csv");
+        File csv = new File(TRAFFIC_CSV);
         long totalLength = csv.length();
 
         try {
