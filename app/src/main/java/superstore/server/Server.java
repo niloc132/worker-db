@@ -3,12 +3,12 @@ package superstore.server;
 import com.colinalworth.gwt.websockets.server.AbstractServerImpl;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
-import com.google.common.collect.PeekingIterator;
 import com.google.common.collect.Streams;
 import com.google.gwt.core.client.Callback;
 import com.googlecode.cqengine.ConcurrentIndexedCollection;
 import com.googlecode.cqengine.IndexedCollection;
 import com.googlecode.cqengine.attribute.Attribute;
+import com.googlecode.cqengine.attribute.SimpleAttribute;
 import com.googlecode.cqengine.index.hash.HashIndex;
 import com.googlecode.cqengine.index.navigable.NavigableIndex;
 import com.googlecode.cqengine.index.support.CloseableIterator;
@@ -30,6 +30,7 @@ import superstore.common.shared.attribute.MapStringAttribute;
 
 import javax.websocket.server.ServerEndpoint;
 import java.io.*;
+import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.stream.Collectors;
@@ -37,16 +38,81 @@ import java.util.stream.Collectors;
 @ServerEndpoint("/socket")
 public class Server extends AbstractServerImpl<StoreServer, StoreClient> implements StoreServer {
     private static final ScheduledExecutorService execService = Executors.newScheduledThreadPool(2);
+    /**
+     * About six million records, from Jan 1 2002 to Dec 31 1006. five years of hourly records, about 365 days in a
+     * year, 24 hrs in a day makes for about 43,800 records per station. If you play 4 hours per second, that is
+     * still 182 minutes to replay, so we'll start the clock with one hour to go, or about a 3 years and 8 months
+     * into the stream, i.e. Aug 1 2005.
+     *
+     * Worth noting that this file requires a minimum of 5gb to load, more to query.
+     */
     public static final String TRAFFIC_CSV = System.getProperty("traffic_csv", "/Users/colin/Downloads/mn_dot_traffic_6m.csv");
+    private Date startNow = new Date(2005 - 1900, 8 - 1, 1);
+    /** How many millis to wait before ticking the "current hour" forward */
+    private static final int millisPerHour = 250;
 
-    private IndexedCollection<Map<String, String>> trafficData = new ConcurrentIndexedCollection<>();
+    private static final IndexedCollection<Map<String, String>> trafficData = new ConcurrentIndexedCollection<>();
+
+    private static final MapStringAttribute dateAttribute = new MapStringAttribute("Date");
+    private static final MapIntegerAttribute hourAttribute = new MapIntegerAttribute("Hour");
+
+    private static final Attribute<Map<String, String>, String> timestampAttribute = new SimpleAttribute<Map<String, String>, String>() {
+        @Override
+        public String getValue(Map<String, String> object, QueryOptions queryOptions) {
+            return dateAttribute.getValue(object, queryOptions) + "T" + hourAttribute.getValue(object, queryOptions);
+        }
+    };
+
     private static final int batchSize = 50_000;
+
+    static {
+        trafficData.addIndex(NavigableIndex.onAttribute(dateAttribute));
+        //TODO partial index on each station for its date and hour?
+        trafficData.addIndex(HashIndex.onAttribute(new MapStringAttribute("STA")));
+        trafficData.addIndex(HashIndex.onAttribute(new MapStringAttribute("Direction")));
+
+        //one more attribute, to get us the ability to pretend-replay history
+        trafficData.addIndex(NavigableIndex.onAttribute(timestampAttribute));
+
+        //load data from disk
+        File csv = new File(TRAFFIC_CSV);
+        long totalLength = csv.length();
+
+        try {
+            CountingFileReader reader = new CountingFileReader(csv);
+            CSVParser parser = new CSVParser(new BufferedReader(reader), CSVFormat.RFC4180.withHeader());
+            Iterator<CSVRecord> recordIterator = Iterators.peekingIterator(parser.iterator());
+            while (recordIterator.hasNext()) {
+                List<Map<String, String>> page = Streams.stream(Iterators.limit(recordIterator, batchSize))
+                        .map(Server::wrap)
+                        .collect(Collectors.toList());
+                trafficData.addAll(page);
+
+
+                double percent = (double) reader.getPosition() / totalLength;
+                System.out.println("data loaded from disk: " + (int) (percent * 100) + "%, " + trafficData.size() + " items");
+//                client.dataLoadedFromDisk("traffic", percent, trafficData.size());
+//                if (trafficData.size() >= 5_000_000) {
+//                    // stop so we can stream the rest of the results
+//                    break;
+//                }
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
 
     /** currently executing and updated query for this instance's active connection */
     private Query<?> activeQuery;
     private QueryOptions activeQueryOptions;
     /** Items left to read from the file */
-    private PeekingIterator<CSVRecord> recordIterator;
+
+
+    private final Object resultsStreamLock = new Object();
+    private Date now = startNow;
+    private Date lastResultsSent;
+    private ScheduledFuture<?> tick;
+    private ScheduledFuture<?> streamingResults;
 
     public Server() {
         super(StoreClient.class);
@@ -56,107 +122,133 @@ public class Server extends AbstractServerImpl<StoreServer, StoreClient> impleme
     public void onOpen(Connection connection, StoreClient client) {
         super.onOpen(connection, client);
 
-        trafficData.addIndex(NavigableIndex.onAttribute(new MapStringAttribute("Date")));
-        //TODO partial index on each station for its date and hour?
-        trafficData.addIndex(HashIndex.onAttribute(new MapStringAttribute("STA")));
-        trafficData.addIndex(HashIndex.onAttribute(new MapStringAttribute("Direction")));
-
-        //load data from disk
-        File csv = new File(TRAFFIC_CSV);
-        long totalLength = csv.length();
-
-        try {
-            CountingFileReader reader = new CountingFileReader(csv);
-            CSVParser parser = new CSVParser(new BufferedReader(reader), CSVFormat.RFC4180.withHeader());
-            recordIterator = Iterators.peekingIterator(parser.iterator());
-            while (recordIterator.hasNext()) {
-                List<Map<String, String>> page = Streams.stream(Iterators.limit(recordIterator, batchSize))
-                        .map(this::wrap)
-                        .collect(Collectors.toList());
-                trafficData.addAll(page);
-
-
-                double percent = (double) reader.getPosition() / totalLength;
-                client.dataLoadedFromDisk("traffic", percent, trafficData.size());
-                if (trafficData.size() >= 5_000_000) {
-                    // stop so we can stream the rest of the results
-                    break;
-                }
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-
         //inform client of schemas
         client.schemaLoaded("traffic", getSchema("traffic"));
 
         // start a thread telling the client that data is ready, streaming an hour per second, if it matches
         // the active query
 
-        execService.scheduleAtFixedRate(() -> {
+        tick = execService.scheduleAtFixedRate(() -> {
+            //scheduleAtFixedRate specifies:
+            //  If any execution of this task
+            //  takes longer than its period, then subsequent executions
+            //  may start late, but will not concurrently execute.
+            now = addNHours(now, 1);
+        }, millisPerHour, millisPerHour, TimeUnit.MILLISECONDS);
+
+        // The original demo assumed a single client at a time, so just read more data from disk, but to support
+        // multiple clients that would... be expensive.
+//        execService.scheduleAtFixedRate(() -> {
+//            //scheduleAtFixedRate specifies:
+//            //  If any execution of this task
+//            //  takes longer than its period, then subsequent executions
+//            //  may start late, but will not concurrently execute.
+//
+//            if (!recordIterator.hasNext()) {
+//                return;
+//            }
+//            //read an item, read as many more as can be read that match the same day and hour
+//            List<Map<String, String>> items = new ArrayList<>();
+//            Map<String, String> first = wrap(recordIterator.next());
+//            items.add(first);
+//            String date = first.get("Date");
+//            String hour = first.get("Hour");
+//            while (recordIterator.hasNext()) {
+//                Map<String, String> next = wrap(recordIterator.peek());
+//                if (!date.equals(next.get("Date")) || !hour.equals(next.get("Hour"))) {
+//                    break;
+//                }
+//                items.add(next);
+//                recordIterator.next();
+//            }
+//
+//            // I think this technically could race with itself, and send out-of-ordered results to the browser
+//            execService.submit(() -> addItems(items));
+//        }, 1, 1, TimeUnit.SECONDS);
+    }
+
+    @Override
+    public void onClose(Connection connection, StoreClient client) {
+        super.onClose(connection, client);
+        if (streamingResults != null) {
+            streamingResults.cancel(true);
+        }
+        if (tick != null) {
+            tick.cancel(true);
+        }
+    }
+
+    private String format(Date date) {
+        return new SimpleDateFormat("yyyy-MM-dd'T'HH").format(date);
+    }
+
+    private Date addNHours(Date now, int hours) {
+        return new Date(now.getTime() + 1000 * 60 * 60 * hours);
+    }
+
+    private static Map<String, String> wrap(CSVRecord record) {
+        return QueryFactory.mapEntity(record.toMap());
+    }
+
+    @Override
+    public synchronized void runQuery(Query<?> query, QueryOptions options) {
+        if (streamingResults != null) {
+            streamingResults.cancel(false);
+        }
+        activeQuery = query;
+        activeQueryOptions = options;
+        //to prevent a race, block on updates to "now"
+        synchronized (resultsStreamLock) {
+            //eliminate results that "haven't arrived yet"
+            query = QueryFactory.and((Query) query, QueryFactory.lessThanOrEqualTo(timestampAttribute, format(now)));
+            lastResultsSent = now;
+            ResultSet<Map<String, String>> results = trafficData.retrieve((Query<Map<String, String>>) query, options);
+//            if (!query.equals(activeQuery)) {
+//                return;
+//            }
+            int size = results.size();
+            getClient().queryFinished(activeQuery, size);
+            if (size == 0) {
+                return;
+            }
+            Iterator<Map<String, String>> iterator = results.iterator();
+            int offset = 0;
+            while (/*query.equals(activeQuery) && */iterator.hasNext()) {
+                getClient().queryResults(activeQuery, Lists.newArrayList(Iterators.limit(iterator, 1000)), offset);
+                offset += 1000;
+            }
+        } //TODO possible this block can end much sooner?
+
+        //schedule updates...
+        // start a thread telling the client that data is ready, streaming an hour per second, if it matches
+        // the active query
+        //TODO move this and cancel this on close
+        streamingResults = execService.scheduleAtFixedRate(() -> {
             //scheduleAtFixedRate specifies:
             //  If any execution of this task
             //  takes longer than its period, then subsequent executions
             //  may start late, but will not concurrently execute.
 
-            if (!recordIterator.hasNext()) {
-                return;
-            }
-            //read an item, read as many more as can be read that match the same day and hour
-            List<Map<String, String>> items = new ArrayList<>();
-            Map<String, String> first = wrap(recordIterator.next());
-            items.add(first);
-            String date = first.get("Date");
-            String hour = first.get("Hour");
-            while (recordIterator.hasNext()) {
-                Map<String, String> next = wrap(recordIterator.peek());
-                if (!date.equals(next.get("Date")) || !hour.equals(next.get("Hour"))) {
-                    break;
+            try {
+                if (activeQuery == null) {
+                    //something is wrong, TODO
+                    return;
                 }
-                items.add(next);
-                recordIterator.next();
-            }
 
-            // I think this technically could race with itself, and send out-of-ordered results to the browser
-            execService.submit(() -> addItems(items));
+                synchronized (resultsStreamLock) {
+                    //can't use QueryFactory.between without a compound index thingie of date+hour
+                    Query<?> q = QueryFactory.and((Query) activeQuery, QueryFactory.between(timestampAttribute, format(lastResultsSent), true, format(now), false));
+                    List<Map<String, String>> items = Lists.newArrayList(trafficData.retrieve((Query<Map<String, String>>) q, activeQueryOptions).iterator());
+                    if (!items.isEmpty()) {
+                        getClient().additionalQueryResults(activeQuery, items);
+                    }
+                    lastResultsSent = now;
+                }
+
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }, 1, 1, TimeUnit.SECONDS);
-    }
-
-    private Map<String, String> wrap(CSVRecord record) {
-        return QueryFactory.mapEntity(record.toMap());
-    }
-
-    protected synchronized void addItems(List<Map<String, String>> items) {
-        trafficData.addAll(items);
-        if (activeQuery != null) {
-            List<Map<String, String>> filteredItems = items.stream().filter(obj -> ((Query) activeQuery).matches(obj, activeQueryOptions)).collect(Collectors.toList());
-            if (!filteredItems.isEmpty()) {
-                getClient().additionalQueryResults(activeQuery, filteredItems);
-            }
-        }
-    }
-
-    @Override
-    public synchronized void runQuery(Query<?> query, QueryOptions options) {
-        activeQuery = query;
-        activeQueryOptions = options;
-        //race here, new data could start to show up before the existing data, and could be included twice
-        ResultSet<Map<String, String>> results = trafficData.retrieve((Query<Map<String, String>>) query, options);
-        if (!query.equals(activeQuery)) {
-            return;
-        }
-        int size = results.size();
-        getClient().queryFinished(query, size);
-        if (size == 0) {
-            return;
-        }
-        Iterator<Map<String, String>> iterator = results.iterator();
-        int offset = 0;
-        while (query.equals(activeQuery) && iterator.hasNext()) {
-            getClient().queryResults(query, Lists.newArrayList(Iterators.limit(iterator, 1000)), offset);
-            offset += 1000;
-        }
     }
 
     @Override
@@ -203,5 +295,11 @@ public class Server extends AbstractServerImpl<StoreServer, StoreClient> impleme
         traffic.put("Value", new MapIntegerAttribute("Value"));
         traffic.put("Direction", new MapStringAttribute("Direction"));
         return traffic;
+    }
+
+    @Override
+    public void onError(Throwable thr) {
+        thr.printStackTrace();
+        super.onError(thr);
     }
 }
