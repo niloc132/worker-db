@@ -117,7 +117,7 @@ public class App implements EntryPoint {
         RootPanel.get().add(remote);
 
         TextArea localTextArea = new TextArea();
-        localTextArea.setValue("between(\"Date\", \"2010-01-01\", \"2010-01-02\")");
+        localTextArea.setValue("between(\"Date\", \"2002-01-05\", \"2002-01-10\")");
         Button localQuery = new Button("go", (ClickHandler) e -> {
             worker.parseQuery("traffic", localTextArea.getValue(), new Callback<ParseResult<?>, IllegalStateException>() {
                 @Override
@@ -131,6 +131,7 @@ public class App implements EntryPoint {
                 }
             });
         });
+
         local = new FlowPanel();
         local.add(localTextArea);
         local.add(localQuery);

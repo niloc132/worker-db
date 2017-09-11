@@ -44,9 +44,10 @@ public class Server extends AbstractServerImpl<StoreServer, StoreClient> impleme
      * still 182 minutes to replay, so we'll start the clock with one hour to go, or about a 3 years and 8 months
      * into the stream, i.e. Aug 1 2005.
      *
-     * Worth noting that this file requires a minimum of 5gb to load, more to query.
+     * Worth noting that the 6m file requires a minimum of 5gb to load, more to query.
+     * The 3m file requires a minimum of 2.5gb to load, more to query.
      */
-    public static final String TRAFFIC_CSV = System.getProperty("traffic_csv", "/Users/colin/Downloads/mn_dot_traffic_6m.csv");
+    public static final String TRAFFIC_CSV = System.getProperty("traffic_csv", "/Users/colin/Downloads/mn_dot_traffic_3m.csv");
     private Date startNow = new Date(2005 - 1900, 8 - 1, 1);
     /** How many millis to wait before ticking the "current hour" forward */
     private static final int millisPerHour = 250;
