@@ -36,7 +36,7 @@ public class QueryOptions_CustomFieldSerializer extends CustomFieldSerializer<Qu
                     streamWriter.writeBoolean(true);
                     streamWriter.writeObject(entry.getValue());
                 } else {
-                    //sip, TODO log or fail?
+                    //skip, TODO log or fail?
                 }
             } else {
                 streamWriter.writeBoolean(false);

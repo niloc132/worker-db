@@ -12,7 +12,7 @@ import java.util.Map;
  */
 public abstract class AbstractMapAttribute<A> implements Attribute<Map<String, String>, A> {
     private transient final Class<A> attributeType;
-    private final String key;
+    String key;
 
     public AbstractMapAttribute(Class<A> attributeType, String key) {
         this.attributeType = attributeType;

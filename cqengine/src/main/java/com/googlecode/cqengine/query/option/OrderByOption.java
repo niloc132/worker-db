@@ -28,7 +28,7 @@ import java.util.List;
  */
 public class OrderByOption<O> implements Serializable {
 
-    private final List<AttributeOrder<O>> attributeOrders;
+    List<AttributeOrder<O>> attributeOrders;
 
     public OrderByOption(List<AttributeOrder<O>> attributeOrders) {
         if (attributeOrders.isEmpty()) {

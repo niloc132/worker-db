@@ -31,8 +31,8 @@ import java.io.Serializable;
  */
 public class AttributeOrder<O> implements Serializable {
 
-    private final Attribute<O, ? extends Comparable> attribute;
-    private final boolean descending;
+    Attribute<O, ? extends Comparable> attribute;
+    boolean descending;
 
     public AttributeOrder(Attribute<O, ? extends Comparable> attribute, boolean descending) {
 

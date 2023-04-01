@@ -2,6 +2,8 @@
   <inherits name="superstore.common.Common" />
 
   <inherits name="com.google.gwt.user.User" />
+  <inherits name="com.google.gwt.user.client.rpc.GwtUserFallback" />
+  <inherits name="org.gwtproject.rpc.worker.RpcToWorkers" />
 
   <entry-point class="superstore.ui.client.App"/>
 </module>

@@ -1,9 +1,6 @@
 <module>
   <inherits name="com.googlecode.cqengine.CQEngine"/>
 
-  <inherits name="com.colinalworth.gwt.websockets.RpcOverWebSockets"/>
-  <inherits name="com.colinalworth.gwt.worker.RpcToWorkers" />
-
   <source path="client"/>
   <source path="shared"/>
 

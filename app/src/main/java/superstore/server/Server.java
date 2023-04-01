@@ -1,10 +1,8 @@
 package superstore.server;
 
-import com.colinalworth.gwt.websockets.server.AbstractServerImpl;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Streams;
-import com.google.gwt.core.client.Callback;
 import com.googlecode.cqengine.ConcurrentIndexedCollection;
 import com.googlecode.cqengine.IndexedCollection;
 import com.googlecode.cqengine.attribute.Attribute;
@@ -22,7 +20,10 @@ import com.googlecode.cqengine.resultset.ResultSet;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
+import org.gwtproject.rpc.api.Callback;
+import org.gwtproject.rpc.servlet.websocket.AbstractServerImpl;
 import superstore.common.shared.StoreClient;
+import superstore.common.shared.StoreClient_Impl;
 import superstore.common.shared.StoreServer;
 import superstore.common.shared.attribute.AbstractMapAttribute;
 import superstore.common.shared.attribute.MapIntegerAttribute;
@@ -47,7 +48,7 @@ public class Server extends AbstractServerImpl<StoreServer, StoreClient> impleme
      * Worth noting that the 6m file requires a minimum of 5gb to load, more to query.
      * The 3m file requires a minimum of 2.5gb to load, more to query.
      */
-    public static final String TRAFFIC_CSV = System.getProperty("traffic_csv", "/Users/colin/Downloads/mn_dot_traffic_3m.csv");
+    public static final String TRAFFIC_CSV = System.getProperty("traffic_csv", "/home/colin/workspace/worker-db/mn_dot_traffic_3m.csv");
     private Date startNow = new Date(2005 - 1900, 8 - 1, 1);
     /** How many millis to wait before ticking the "current hour" forward */
     private static final int millisPerHour = 250;
@@ -104,7 +105,7 @@ public class Server extends AbstractServerImpl<StoreServer, StoreClient> impleme
     }
 
     /** currently executing and updated query for this instance's active connection */
-    private Query<?> activeQuery;
+    private Query<Map<String, String>> activeQuery;
     private QueryOptions activeQueryOptions;
     /** Items left to read from the file */
 
@@ -116,7 +117,7 @@ public class Server extends AbstractServerImpl<StoreServer, StoreClient> impleme
     private ScheduledFuture<?> streamingResults;
 
     public Server() {
-        super(StoreClient.class);
+        super(StoreClient_Impl::new);
     }
 
     @Override
@@ -192,7 +193,7 @@ public class Server extends AbstractServerImpl<StoreServer, StoreClient> impleme
     }
 
     @Override
-    public synchronized void runQuery(Query<?> query, QueryOptions options) {
+    public synchronized void runQuery(Query<Map<String, String>> query, QueryOptions options) {
         if (streamingResults != null) {
             streamingResults.cancel(false);
         }
@@ -201,9 +202,9 @@ public class Server extends AbstractServerImpl<StoreServer, StoreClient> impleme
         //to prevent a race, block on updates to "now"
         synchronized (resultsStreamLock) {
             //eliminate results that "haven't arrived yet"
-            query = QueryFactory.and((Query) query, QueryFactory.lessThanOrEqualTo(timestampAttribute, format(now)));
+            query = QueryFactory.and(query, QueryFactory.lessThanOrEqualTo(timestampAttribute, format(now)));
             lastResultsSent = now;
-            ResultSet<Map<String, String>> results = trafficData.retrieve((Query<Map<String, String>>) query, options);
+            ResultSet<Map<String, String>> results = trafficData.retrieve(query, options);
 //            if (!query.equals(activeQuery)) {
 //                return;
 //            }
@@ -238,7 +239,7 @@ public class Server extends AbstractServerImpl<StoreServer, StoreClient> impleme
 
                 synchronized (resultsStreamLock) {
                     //can't use QueryFactory.between without a compound index thingie of date+hour
-                    Query<?> q = QueryFactory.and((Query) activeQuery, QueryFactory.between(timestampAttribute, format(lastResultsSent), true, format(now), false));
+                    Query<Map<String, String>> q = QueryFactory.and(activeQuery, QueryFactory.between(timestampAttribute, format(lastResultsSent), true, format(now), false));
                     List<Map<String, String>> items = Lists.newArrayList(trafficData.retrieve((Query<Map<String, String>>) q, activeQueryOptions).iterator());
                     if (!items.isEmpty()) {
                         getClient().additionalQueryResults(activeQuery, items);
@@ -253,12 +254,14 @@ public class Server extends AbstractServerImpl<StoreServer, StoreClient> impleme
     }
 
     @Override
-    public void parseQuery(String schema, String query, Callback<ParseResult<?>, IllegalStateException> callback) {
+    public void parseQuery(String schema, String query, Callback<ParseResult<Map<String, String>>, IllegalStateException> callback) {
         try {
             callback.onSuccess(CQNParser.forPojoWithAttributes((Class<Map<String, String>>) (Class) Map.class, getSchema(schema)).parse(query));
         } catch (IllegalStateException ex) {
+            ex.printStackTrace();
             callback.onFailure(ex);
         } catch (Exception ex) {
+            ex.printStackTrace();
             callback.onFailure(new IllegalStateException(ex));
         }
     }
@@ -279,7 +282,7 @@ public class Server extends AbstractServerImpl<StoreServer, StoreClient> impleme
             CloseableIterator<Object> iterator = hasIndex.get().getDistinctKeys(QueryFactory.noQueryOptions()).iterator();
             int offset = 0;
             while (iterator.hasNext()) {
-                getClient().uniqueKeysResults((Attribute) attribute, Lists.newArrayList(Iterators.limit(iterator, 200)), offset);
+                getClient().uniqueKeysResults(attribute, Lists.newArrayList(Iterators.limit(iterator, 200)), offset);
                 offset += 200;
             }
         } else {

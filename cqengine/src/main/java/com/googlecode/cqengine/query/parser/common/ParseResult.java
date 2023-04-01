@@ -31,8 +31,8 @@ import java.io.Serializable;
  */
 public class ParseResult<O> implements Serializable {
 
-    final Query<O> query;
-    final QueryOptions queryOptions;
+    Query<O> query;
+    QueryOptions queryOptions;
 
     public ParseResult() {
         this(null, null);

@@ -1,9 +1,6 @@
 package superstore.ui.client;
 
-import com.colinalworth.gwt.worker.client.WorkerFactory;
-import com.google.gwt.core.client.Callback;
 import com.google.gwt.core.client.EntryPoint;
-import com.google.gwt.core.client.GWT;
 import com.google.gwt.event.dom.client.ClickHandler;
 import com.google.gwt.user.client.ui.*;
 import com.googlecode.cqengine.attribute.Attribute;
@@ -11,8 +8,11 @@ import com.googlecode.cqengine.query.Query;
 import com.googlecode.cqengine.query.parser.common.ParseResult;
 import jsinterop.annotations.JsPackage;
 import jsinterop.annotations.JsType;
+import org.gwtproject.rpc.api.Callback;
+import org.gwtproject.rpc.worker.client.WorkerFactory;
 import superstore.common.client.StoreApp;
 import superstore.common.client.StoreWorker;
+import superstore.common.client.StoreWorker_Impl;
 import superstore.common.shared.attribute.AbstractMapAttribute;
 
 import java.util.List;
@@ -27,7 +27,6 @@ public class App implements EntryPoint {
 
 //    interface Factory extends ServerBuilder<StoreServer> {}
 
-    interface Factory extends WorkerFactory<StoreWorker, StoreApp> {}
     @Override
     public void onModuleLoad() {
         RootPanel.get().add(new Label("" +
@@ -41,7 +40,7 @@ public class App implements EntryPoint {
 //
 //        StoreServer server = factory.start();
 
-        Factory factory = GWT.create(Factory.class);
+        WorkerFactory<StoreWorker, StoreApp> factory = WorkerFactory.of(StoreWorker_Impl::new);
         StoreWorker worker = factory.createDedicatedWorker("superstore.worker.Worker/worker.js", new StoreApp() {
             private StoreWorker remote;
             @Override
@@ -52,6 +51,11 @@ public class App implements EntryPoint {
             @Override
             public StoreWorker getRemote() {
                 return remote;
+            }
+
+            @Override
+            public void onError(Throwable throwable) {
+                //TODO
             }
 
             @Override
@@ -71,17 +75,17 @@ public class App implements EntryPoint {
 //            }
 
             @Override
-            public void queryFinished(Query<?> query, int totalCount) {
+            public void queryFinished(Query<Map<String, String>> query, int totalCount) {
                 Console.log("Query had " + totalCount + " results");
             }
 
             @Override
-            public void queryResults(Query<?> query, List<Map<String, String>> results, int offset) {
+            public void queryResults(Query<Map<String, String>> query, List<Map<String, String>> results, int offset) {
                 Console.log("Results loading " + offset);
             }
 
             @Override
-            public void additionalQueryResults(Query<?> query, List<Map<String, String>> items) {
+            public void additionalQueryResults(Query<Map<String, String>> query, List<Map<String, String>> items) {
                 Console.log("More items streamed in to app: " + items.size());
             }
 
@@ -91,22 +95,22 @@ public class App implements EntryPoint {
             }
 
             @Override
-            public <T> void uniqueKeysResults(Attribute<Map<String, String>, T> attribute, List<T> results, int offset) {
+            public void uniqueKeysResults(Attribute<Map<String, String>, ?> attribute, List<?> results, int offset) {
                 Console.log(attribute.getAttributeName() + " : " + results);
             }
         });
 
         TextArea remoteTextArea = new TextArea();
         remoteTextArea.setValue("between(\"Date\", \"2002-01-01\", \"2002-02-01\")");
-        Button remoteQuery = new Button("go", (ClickHandler) e -> {
-            worker.parseQuery("traffic", remoteTextArea.getValue(), new Callback<ParseResult<?>, IllegalStateException>() {
+        Button remoteQuery = new Button("execute remote query", (ClickHandler) e -> {
+            worker.parseQuery("traffic", remoteTextArea.getValue(), new Callback<ParseResult<Map<String, String>>, IllegalStateException>() {
                 @Override
                 public void onFailure(IllegalStateException reason) {
                     Console.log(reason.getMessage());
                 }
 
                 @Override
-                public void onSuccess(ParseResult<?> result) {
+                public void onSuccess(ParseResult<Map<String, String>> result) {
                     worker.runRemoteQuery(result.getQuery(), result.getQueryOptions());
                 }
             });
@@ -117,16 +121,16 @@ public class App implements EntryPoint {
         RootPanel.get().add(remote);
 
         TextArea localTextArea = new TextArea();
-        localTextArea.setValue("between(\"Date\", \"2002-01-05\", \"2002-01-10\")");
-        Button localQuery = new Button("go", (ClickHandler) e -> {
-            worker.parseQuery("traffic", localTextArea.getValue(), new Callback<ParseResult<?>, IllegalStateException>() {
+        localTextArea.setValue("and(between(\"Date\", \"2002-01-05\", \"2002-01-10\"), equal(\"STA\", 187))");
+        Button localQuery = new Button("execute local query", (ClickHandler) e -> {
+            worker.parseQuery("traffic", localTextArea.getValue(), new Callback<ParseResult<Map<String, String>>, IllegalStateException>() {
                 @Override
                 public void onFailure(IllegalStateException reason) {
                     Console.log(reason.getMessage());
                 }
 
                 @Override
-                public void onSuccess(ParseResult<?> result) {
+                public void onSuccess(ParseResult<Map<String, String>> result) {
                     worker.runLocalQuery(result.getQuery(), result.getQueryOptions());
                 }
             });

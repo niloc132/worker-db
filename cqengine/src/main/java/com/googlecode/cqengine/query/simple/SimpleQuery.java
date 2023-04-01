@@ -33,7 +33,7 @@ public abstract class SimpleQuery<O, A> implements Query<O> {
 
     @GwtTransient
     protected final boolean attributeIsSimple;
-    protected final Attribute<O, A> attribute;
+    protected Attribute<O, A> attribute;
     @GwtTransient
     protected final SimpleAttribute<O, A> simpleAttribute;
     // Lazy calculate and cache hash code...

@@ -30,9 +30,9 @@ import java.util.Map;
  */
 public class QueryOptions implements Serializable {
 
-    final Map<Object, Object> options;
+    Map<Object, Object> options;
 
-    private OrderByOption<?> unused;
+    OrderByOption<?> unused;
 
     public QueryOptions(Map<Object, Object> options) {
         this.options = options;

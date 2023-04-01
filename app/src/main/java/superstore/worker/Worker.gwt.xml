@@ -2,7 +2,12 @@
   <inherits name="superstore.common.Common"/>
   <inherits name="com.googlecode.cqengine.CQEngine" />
   <inherits name="com.google.common.collect.Collect"/>
-  <inherits name="com.colinalworth.gwt.websockets.RpcOverWebSockets"/>
+
+  <!-- Due to the use of guava, we cannot use LegacyRpcClasses, but need to rely on User -->
+<!--  <inherits name="com.google.gwt.user.client.rpc.LegacyRpcClasses" />-->
+  <inherits name="com.google.gwt.user.client.rpc.GwtUserFallback" />
+
+  <inherits name="org.gwtproject.rpc.worker.RpcToWorkers" />
   <inherits name="prj.gwtwwlinker.workerlinker.WorkerLinker" />
 
 

@@ -1,0 +1,15 @@
+java.util.ArrayList
+java.util.HashMap
+com.googlecode.cqengine.query.simple.Has
+com.googlecode.cqengine.query.simple.SimpleQuery
+com.googlecode.cqengine.query.simple.Between
+com.googlecode.cqengine.query.simple.LessThan
+com.googlecode.cqengine.query.simple.In
+com.googlecode.cqengine.query.simple.GreaterThan
+com.googlecode.cqengine.query.simple.Equal
+com.googlecode.cqengine.query.simple.All
+com.googlecode.cqengine.query.simple.None
+com.googlecode.cqengine.entity.MapEntity
+com.googlecode.cqengine.query.logical.And
+com.googlecode.cqengine.query.logical.Or
+com.googlecode.cqengine.query.logical.Not

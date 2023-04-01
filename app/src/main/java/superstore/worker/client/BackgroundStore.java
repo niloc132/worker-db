@@ -1,17 +1,11 @@
 package superstore.worker.client;
 
-import com.colinalworth.gwt.websockets.client.ServerBuilder;
-import com.colinalworth.gwt.worker.client.WorkerFactory;
-import com.colinalworth.gwt.worker.client.worker.MessagePort;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Streams;
-import com.google.gwt.core.client.Callback;
 import com.google.gwt.core.client.EntryPoint;
-import com.google.gwt.core.client.GWT;
 import com.googlecode.cqengine.ConcurrentIndexedCollection;
 import com.googlecode.cqengine.IndexedCollection;
-import com.googlecode.cqengine.attribute.Attribute;
 import com.googlecode.cqengine.index.hash.HashIndex;
 import com.googlecode.cqengine.index.navigable.NavigableIndex;
 import com.googlecode.cqengine.index.support.CloseableIterator;
@@ -21,9 +15,15 @@ import com.googlecode.cqengine.query.QueryFactory;
 import com.googlecode.cqengine.query.option.QueryOptions;
 import com.googlecode.cqengine.query.parser.common.ParseResult;
 import com.googlecode.cqengine.resultset.ResultSet;
+import elemental2.dom.DomGlobal;
+import org.gwtproject.rpc.api.Callback;
+import org.gwtproject.rpc.gwt.client.ServerBuilder;
+import org.gwtproject.rpc.worker.client.WorkerFactory;
 import superstore.common.client.StoreApp;
+import superstore.common.client.StoreApp_Impl;
 import superstore.common.client.StoreWorker;
 import superstore.common.shared.StoreServer;
+import superstore.common.shared.StoreServer_Impl;
 import superstore.common.shared.attribute.AbstractMapAttribute;
 import superstore.common.shared.attribute.MapStringAttribute;
 
@@ -37,13 +37,10 @@ import java.util.stream.Collectors;
  * Created by colin on 3/28/17.
  */
 public class BackgroundStore implements EntryPoint {
-    interface Server extends ServerBuilder<StoreServer> {}
-
-    interface App extends WorkerFactory<StoreApp, StoreWorker> {}
 
     private IndexedCollection<Map<String, String>> trafficData = new ConcurrentIndexedCollection<>();
     private Map<String, AbstractMapAttribute<?>> columns;
-    private volatile Query<?> activeQuery;
+    private volatile Query<Map<String, String>> activeQuery;
     private QueryOptions activeQueryOptions;
 
     private StoreApp app;
@@ -59,23 +56,28 @@ public class BackgroundStore implements EntryPoint {
         trafficData.addIndex(HashIndex.onAttribute(new MapStringAttribute("Direction")));
 
 
-        Server server = GWT.create(Server.class);
+        ServerBuilder<StoreServer> server = ServerBuilder.of(StoreServer_Impl::new);
         server.setPath("/socket");
 
         StoreServer socket = server.start();
 
         StoreWorker workerImpl = new StoreWorker() {
             @Override
-            public void runRemoteQuery(Query<?> query, QueryOptions options) {
+            public void onError(Throwable throwable) {
+                //TODO
+            }
+
+            @Override
+            public void runRemoteQuery(Query<Map<String, String>> query, QueryOptions options) {
                 socket.runQuery(query, options);
             }
 
             @Override
-            public void runLocalQuery(Query<?> query, QueryOptions options) {
+            public void runLocalQuery(Query<Map<String, String>> query, QueryOptions options) {
                 activeQuery = query;
                 activeQueryOptions = options;
                 //race here, new data could start to show up before the existing data, and could be included twice
-                ResultSet<Map<String, String>> results = trafficData.retrieve((Query<Map<String, String>>) query, options);
+                ResultSet<Map<String, String>> results = trafficData.retrieve(query, options);
                 if (!query.equals(activeQuery)) {
                     return;
                 }
@@ -93,13 +95,14 @@ public class BackgroundStore implements EntryPoint {
             }
 
             @Override
-            public void parseQuery(String schema, String query, Callback<ParseResult<?>, IllegalStateException> callback) {
+            public void parseQuery(String schema, String query, Callback<ParseResult<Map<String, String>>, IllegalStateException> callback) {
                 //straight pass-through to the server and back again
                 socket.parseQuery(schema, query, callback);
             }
 
             @Override
             public void loadLocalUniqueKeysForColumn(String schema, AbstractMapAttribute<?> attribute) {
+                DomGlobal.console.log("asked to load unique keys for " + schema);
                 assert schema.equals("traffic");
 
                 Optional<KeyStatisticsAttributeIndex<Object, Map<String, String>>> hasIndex = Streams.stream(trafficData.getIndexes())
@@ -108,13 +111,14 @@ public class BackgroundStore implements EntryPoint {
                         .filter(index -> index.getAttribute().equals(attribute))
                         .findFirst();
                 if (hasIndex.isPresent()) {
+                    DomGlobal.console.log("index present");
                     int count = hasIndex.get().getCountOfDistinctKeys(QueryFactory.noQueryOptions());
                     getRemote().uniqueKeysLoaded(attribute, count);
 
                     CloseableIterator<Object> iterator = hasIndex.get().getDistinctKeys(QueryFactory.noQueryOptions()).iterator();
                     int offset = 0;
                     while (iterator.hasNext()) {
-                        getRemote().uniqueKeysResults((Attribute) attribute, Lists.newArrayList(Iterators.limit(iterator, 200)), offset);
+                        getRemote().uniqueKeysResults(attribute, Lists.newArrayList(Iterators.limit(iterator, 200)), offset);
                         offset += 200;
                     }
                 } else {
@@ -144,17 +148,14 @@ public class BackgroundStore implements EntryPoint {
             }
 
             @Override
-            public void queryFinished(Query<?> query, int totalCount) {
-                super.queryFinished(query, totalCount);
-
+            public void queryFinished(Query<Map<String, String>> query, int totalCount) {
                 incomingResults = totalCount;
                 trafficData.clear();
             }
 
             @Override
-            public void queryResults(Query<?> query, List<Map<String, String>> results, int offset) {
+            public void queryResults(Query<Map<String, String>> query, List<Map<String, String>> results, int offset) {
                 super.queryResults(query, results, offset);
-
                 trafficData.addAll(results);
                 if (incomingResults == trafficData.size()) {
                     //all data is in the client, tell the app about current unique values or something
@@ -165,13 +166,13 @@ public class BackgroundStore implements EntryPoint {
             }
 
             @Override
-            public void additionalQueryResults(Query<?> query, List<Map<String, String>> items) {
+            public void additionalQueryResults(Query<Map<String, String>> query, List<Map<String, String>> items) {
                 super.additionalQueryResults(query, items);
 
                 trafficData.addAll(items);
 
                 if (activeQuery != null) {
-                    List<Map<String, String>> filteredItems = items.stream().filter(obj -> ((Query) activeQuery).matches(obj, activeQueryOptions)).collect(Collectors.toList());
+                    List<Map<String, String>> filteredItems = items.stream().filter(obj -> activeQuery.matches(obj, activeQueryOptions)).collect(Collectors.toList());
                     if (!filteredItems.isEmpty()) {
                         app.additionalQueryResults(activeQuery, filteredItems);
                     }
@@ -179,13 +180,9 @@ public class BackgroundStore implements EntryPoint {
             }
         });
 
-        App appWrapper = GWT.create(App.class);
+        WorkerFactory<StoreApp, StoreWorker> factory = WorkerFactory.of(StoreApp_Impl::new);
 
-        appWrapper.wrapRemoteMessagePort(self(), workerImpl);
+        factory.wrapDedicatedWorkerGlobalScope(workerImpl);
 
     }
-
-    private native MessagePort self() /*-{
-      return $wnd;
-    }-*/;
 }
