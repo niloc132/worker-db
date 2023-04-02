@@ -6,8 +6,6 @@ import com.google.gwt.user.client.ui.*;
 import com.googlecode.cqengine.attribute.Attribute;
 import com.googlecode.cqengine.query.Query;
 import com.googlecode.cqengine.query.parser.common.ParseResult;
-import jsinterop.annotations.JsPackage;
-import jsinterop.annotations.JsType;
 import org.gwtproject.rpc.api.Callback;
 import org.gwtproject.rpc.worker.client.WorkerFactory;
 import superstore.common.client.StoreApp;
@@ -17,6 +15,8 @@ import superstore.common.shared.attribute.AbstractMapAttribute;
 
 import java.util.List;
 import java.util.Map;
+
+import static elemental2.dom.DomGlobal.console;
 
 /**
  * Created by colin on 3/25/17.
@@ -30,7 +30,7 @@ public class App implements EntryPoint {
     @Override
     public void onModuleLoad() {
         RootPanel.get().add(new Label("" +
-                "This demo app is best run in Chrome, with the developer tools open, to see network data stream in" +
+                "This demo app is best run with the developer tools open, to see network data stream in" +
                 "(Network tab, click on 'socket'), and with the Console open to see results logged from the worker" +
                 "and from the app as various events take place and to show unique index values as they are " +
                 "available."
@@ -60,7 +60,7 @@ public class App implements EntryPoint {
 
             @Override
             public void schemaLoaded(String name, Map<String, AbstractMapAttribute<?>> columns) {
-                Console.log("Schema loaded, " + columns.size() + " columns");
+                console.log("Schema loaded, " + columns.size() + " columns");
 
                 for (AbstractMapAttribute<?> attribute : columns.values()) {
                     RootPanel.get().add(new Button(attribute.getAttributeName() + " values", (ClickHandler) e -> {
@@ -71,32 +71,32 @@ public class App implements EntryPoint {
 
 //            @Override
 //            public void dataLoadedFromDisk(String schema, double percent, int rows) {
-//                Console.log("Data loading for " + schema + " from disk, " + (percent * 100) + ", " + rows + " loaded");
+//                console.log("Data loading for " + schema + " from disk, " + (percent * 100) + ", " + rows + " loaded");
 //            }
 
             @Override
             public void queryFinished(Query<Map<String, String>> query, int totalCount) {
-                Console.log("Query had " + totalCount + " results");
+                console.log("Query had " + totalCount + " results");
             }
 
             @Override
             public void queryResults(Query<Map<String, String>> query, List<Map<String, String>> results, int offset) {
-                Console.log("Results loading " + offset);
+                console.log("Results loading " + offset);
             }
 
             @Override
             public void additionalQueryResults(Query<Map<String, String>> query, List<Map<String, String>> items) {
-                Console.log("More items streamed in to app: " + items.size());
+                console.log("More items streamed in to app: " + items.size());
             }
 
             @Override
             public void uniqueKeysLoaded(Attribute<Map<String, String>, ?> attribute, int totalCount) {
-                Console.log("unique keys for attribute " + attribute.getAttributeName() + " count: " + totalCount);
+                console.log("unique keys for attribute " + attribute.getAttributeName() + " count: " + totalCount);
             }
 
             @Override
             public void uniqueKeysResults(Attribute<Map<String, String>, ?> attribute, List<?> results, int offset) {
-                Console.log(attribute.getAttributeName() + " : " + results);
+                console.log(attribute.getAttributeName() + " : " + results);
             }
         });
 
@@ -106,7 +106,7 @@ public class App implements EntryPoint {
             worker.parseQuery("traffic", remoteTextArea.getValue(), new Callback<ParseResult<Map<String, String>>, IllegalStateException>() {
                 @Override
                 public void onFailure(IllegalStateException reason) {
-                    Console.log(reason.getMessage());
+                    console.log(reason.getMessage());
                 }
 
                 @Override
@@ -126,7 +126,7 @@ public class App implements EntryPoint {
             worker.parseQuery("traffic", localTextArea.getValue(), new Callback<ParseResult<Map<String, String>>, IllegalStateException>() {
                 @Override
                 public void onFailure(IllegalStateException reason) {
-                    Console.log(reason.getMessage());
+                    console.log(reason.getMessage());
                 }
 
                 @Override
@@ -141,10 +141,5 @@ public class App implements EntryPoint {
         local.add(localQuery);
         RootPanel.get().add(local);
 
-    }
-
-    @JsType(isNative = true, name = "console", namespace = JsPackage.GLOBAL)
-    public static class Console {
-        public native static void log(String message);
     }
 }
