@@ -17,8 +17,8 @@ import static elemental2.dom.DomGlobal.console;
  */
 public class ClientMessageHandler extends AbstractClientImpl<StoreClient, StoreServer> implements StoreClient {
     @Override
-    public void dataLoadedFromDisk(String schema, double percent, int rows) {
-        console.log("Data into server loading for " + schema + " from disk, " + (percent * 100) + ", " + rows + " loaded");
+    public void dataLoadedFromDisk(String schema, int rows) {
+        console.log("Data into server loading for " + schema + " from disk, " + rows + " loaded");
     }
 
     @Override

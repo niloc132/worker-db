@@ -59,12 +59,17 @@ public class App implements EntryPoint {
             }
 
             @Override
+            public void dataLoadedFromDisk(String schema, int rows) {
+
+            }
+
+            @Override
             public void schemaLoaded(String name, Map<String, AbstractMapAttribute<?>> columns) {
                 console.log("Schema loaded, " + columns.size() + " columns");
 
                 for (AbstractMapAttribute<?> attribute : columns.values()) {
                     RootPanel.get().add(new Button(attribute.getAttributeName() + " values", (ClickHandler) e -> {
-                        getRemote().loadLocalUniqueKeysForColumn(name, attribute);
+                        getRemote().loadUniqueKeysForColumn(name, attribute);
                     }));
                 }
             }
@@ -131,7 +136,7 @@ public class App implements EntryPoint {
 
                 @Override
                 public void onSuccess(ParseResult<Map<String, String>> result) {
-                    worker.runLocalQuery(result.getQuery(), result.getQueryOptions());
+                    worker.runQuery(result.getQuery(), result.getQueryOptions());
                 }
             });
         });

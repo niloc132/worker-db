@@ -2,16 +2,10 @@ package superstore.worker.client;
 
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Streams;
 import com.google.gwt.core.client.EntryPoint;
 import com.googlecode.cqengine.ConcurrentIndexedCollection;
 import com.googlecode.cqengine.IndexedCollection;
-import com.googlecode.cqengine.index.hash.HashIndex;
-import com.googlecode.cqengine.index.navigable.NavigableIndex;
-import com.googlecode.cqengine.index.support.CloseableIterator;
-import com.googlecode.cqengine.index.support.KeyStatisticsAttributeIndex;
 import com.googlecode.cqengine.query.Query;
-import com.googlecode.cqengine.query.QueryFactory;
 import com.googlecode.cqengine.query.option.QueryOptions;
 import com.googlecode.cqengine.query.parser.common.ParseResult;
 import com.googlecode.cqengine.resultset.ResultSet;
@@ -22,15 +16,14 @@ import org.gwtproject.rpc.worker.client.WorkerFactory;
 import superstore.common.client.StoreApp;
 import superstore.common.client.StoreApp_Impl;
 import superstore.common.client.StoreWorker;
+import superstore.common.shared.DataStore;
 import superstore.common.shared.StoreServer;
 import superstore.common.shared.StoreServer_Impl;
 import superstore.common.shared.attribute.AbstractMapAttribute;
-import superstore.common.shared.attribute.MapStringAttribute;
 
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -38,10 +31,7 @@ import java.util.stream.Collectors;
  */
 public class BackgroundStore implements EntryPoint {
 
-    private IndexedCollection<Map<String, String>> trafficData = new ConcurrentIndexedCollection<>();
-    private Map<String, AbstractMapAttribute<?>> columns;
-    private volatile Query<Map<String, String>> activeQuery;
-    private QueryOptions activeQueryOptions;
+    private final DataStore store = new DataStore();
 
     private StoreApp app;
 
@@ -49,19 +39,13 @@ public class BackgroundStore implements EntryPoint {
     @Override
     public void onModuleLoad() {
 
-        //TODO copy/pasted from Server, make an abstract superclass for both?
-        trafficData.addIndex(NavigableIndex.onAttribute(new MapStringAttribute("Date")));
-        //TODO partial index on each station for its date and hour?
-        trafficData.addIndex(HashIndex.onAttribute(new MapStringAttribute("STA")));
-        trafficData.addIndex(HashIndex.onAttribute(new MapStringAttribute("Direction")));
-
-
         ServerBuilder<StoreServer> server = ServerBuilder.of(StoreServer_Impl::new);
         server.setPath("/socket");
 
         StoreServer socket = server.start();
 
         StoreWorker workerImpl = new StoreWorker() {
+            private DataStore.QueryConnection pageConnection;
             @Override
             public void onError(Throwable throwable) {
                 //TODO
@@ -73,25 +57,29 @@ public class BackgroundStore implements EntryPoint {
             }
 
             @Override
-            public void runLocalQuery(Query<Map<String, String>> query, QueryOptions options) {
-                activeQuery = query;
-                activeQueryOptions = options;
-                //race here, new data could start to show up before the existing data, and could be included twice
-                ResultSet<Map<String, String>> results = trafficData.retrieve(query, options);
-                if (!query.equals(activeQuery)) {
-                    return;
-                }
-                int size = results.size();
-                getRemote().queryFinished(query, size);
-                if (size == 0) {
-                    return;
-                }
-                Iterator<Map<String, String>> iterator = results.iterator();
-                int offset = 0;
-                while (query.equals(activeQuery) && iterator.hasNext()) {
-                    getRemote().queryResults(query, Lists.newArrayList(Iterators.limit(iterator, 1000)), offset);
-                    offset += 1000;
-                }
+            public void runQuery(Query<Map<String, String>> query, QueryOptions options) {
+                pageConnection.runQuery(query, options);
+
+//
+//
+//                activeQuery = query;
+//                activeQueryOptions = options;
+//                //race here, new data could start to show up before the existing data, and could be included twice
+//                ResultSet<Map<String, String>> results = trafficData.retrieve(query, options);
+//                if (!query.equals(activeQuery)) {
+//                    return;
+//                }
+//                int size = results.size();
+//                getRemote().queryFinished(query, size);
+//                if (size == 0) {
+//                    return;
+//                }
+//                Iterator<Map<String, String>> iterator = results.iterator();
+//                int offset = 0;
+//                while (query.equals(activeQuery) && iterator.hasNext()) {
+//                    getRemote().queryResults(query, Lists.newArrayList(Iterators.limit(iterator, 1000)), offset);
+//                    offset += 1000;
+//                }
             }
 
             @Override
@@ -101,33 +89,21 @@ public class BackgroundStore implements EntryPoint {
             }
 
             @Override
-            public void loadLocalUniqueKeysForColumn(String schema, AbstractMapAttribute<?> attribute) {
+            public void loadUniqueKeysForColumn(String schema, AbstractMapAttribute<?> attribute) {
                 DomGlobal.console.log("asked to load unique keys for " + schema);
                 assert schema.equals("traffic");
+                pageConnection.loadUniqueKeysForColumn(schema, attribute);
+            }
 
-                Optional<KeyStatisticsAttributeIndex<Object, Map<String, String>>> hasIndex = Streams.stream(trafficData.getIndexes())
-                        .filter(index -> index instanceof KeyStatisticsAttributeIndex)
-                        .map(index -> (KeyStatisticsAttributeIndex<Object, Map<String, String>>) index)
-                        .filter(index -> index.getAttribute().equals(attribute))
-                        .findFirst();
-                if (hasIndex.isPresent()) {
-                    DomGlobal.console.log("index present");
-                    int count = hasIndex.get().getCountOfDistinctKeys(QueryFactory.noQueryOptions());
-                    getRemote().uniqueKeysLoaded(attribute, count);
-
-                    CloseableIterator<Object> iterator = hasIndex.get().getDistinctKeys(QueryFactory.noQueryOptions()).iterator();
-                    int offset = 0;
-                    while (iterator.hasNext()) {
-                        getRemote().uniqueKeysResults(attribute, Lists.newArrayList(Iterators.limit(iterator, 200)), offset);
-                        offset += 200;
-                    }
-                } else {
-                    getRemote().uniqueKeysLoaded(attribute, 0);
-                }
+            @Override
+            public void close() {
+                pageConnection.close();
             }
 
             @Override
             public void setRemote(StoreApp storeApp) {
+                pageConnection = store.connect(storeApp);
+
                 app = storeApp;
             }
 
@@ -137,30 +113,32 @@ public class BackgroundStore implements EntryPoint {
             }
         };
 
+
         socket.setClient(new ClientMessageHandler() {
             int incomingResults;
             @Override
             public void schemaLoaded(String name, Map<String, AbstractMapAttribute<?>> columns) {
                 super.schemaLoaded(name, columns);
 
-                BackgroundStore.this.columns = columns;
-                app.schemaLoaded(name, columns);
+                //TODO we should use the server schemas to set up client DataStore instances
+//                BackgroundStore.this.columns = columns;
+//                app.schemaLoaded(name, columns);
             }
 
             @Override
             public void queryFinished(Query<Map<String, String>> query, int totalCount) {
                 incomingResults = totalCount;
-                trafficData.clear();
+                store.clear();
             }
 
             @Override
             public void queryResults(Query<Map<String, String>> query, List<Map<String, String>> results, int offset) {
                 super.queryResults(query, results, offset);
-                trafficData.addAll(results);
-                if (incomingResults == trafficData.size()) {
+                store.addAll(results);
+                if (incomingResults == store.size()) {
                     //all data is in the client, tell the app about current unique values or something
-                    for (AbstractMapAttribute<?> attribute : columns.values()) {
-                        workerImpl.loadLocalUniqueKeysForColumn("traffic", attribute);
+                    for (AbstractMapAttribute<?> attribute : store.getColumns().values()) {
+                        workerImpl.loadUniqueKeysForColumn("traffic", attribute);
                     }
                 }
             }
@@ -169,14 +147,15 @@ public class BackgroundStore implements EntryPoint {
             public void additionalQueryResults(Query<Map<String, String>> query, List<Map<String, String>> items) {
                 super.additionalQueryResults(query, items);
 
-                trafficData.addAll(items);
+                store.addAll(items);
 
-                if (activeQuery != null) {
-                    List<Map<String, String>> filteredItems = items.stream().filter(obj -> activeQuery.matches(obj, activeQueryOptions)).collect(Collectors.toList());
-                    if (!filteredItems.isEmpty()) {
-                        app.additionalQueryResults(activeQuery, filteredItems);
-                    }
-                }
+                //TODO wire this up via DataStore
+//                if (activeQuery != null) {
+//                    List<Map<String, String>> filteredItems = items.stream().filter(obj -> activeQuery.matches(obj, activeQueryOptions)).collect(Collectors.toList());
+//                    if (!filteredItems.isEmpty()) {
+//                        app.additionalQueryResults(activeQuery, filteredItems);
+//                    }
+//                }
             }
         });
 
